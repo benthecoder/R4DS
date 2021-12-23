@@ -1,0 +1,267 @@
+---
+title: Analyzing Motorcycle Parts Sales
+subtitle: Data Camp Competition
+author: Benedict Neo
+date: 23-12-2021
+output:
+  html_document:
+   toc: true
+   toc_float: true
+   toc_depth: 3
+   theme: flatly
+   highlight: zenburn
+   df_print: paged
+   code_folding: hide
+---
+
+# Reporting on sales data
+
+## 📖 Background
+
+You work in the accounting department of a company that sells motorcycle parts. The company operates three warehouses in a large metropolitan area.
+
+You've recently learned data manipulation and plotting, and suggest helping your colleague analyze past sales data. Your colleague wants to capture sales by payment method. She also needs to know the average unit price for each product line.
+
+## 💾 The data
+
+The team assembled the following sales data with the following fields:
+
+-   `date` - The date, from June to August 2021.
+-   `warehouse` - The company operates three warehouses: North, Central, and West.
+-   `client_type` - There are two types of customers: Retail and Wholesale.
+-   `product_line` - Type of products purchased.
+-   `quantity` - How many items were purchased.
+-   `unit_price` - Price per item sold.
+-   `total` - Total sale = quantity \* unit_price.
+-   `payment` - How the client paid: Cash, Credit card, Transfer.
+
+Find more info about this challenge [here](https://app.datacamp.com/learn/competitions/motorcycle-parts-sales)
+
+## Load Libraries
+
+```{r message=FALSE}
+## First specify the packages of interest
+packages = c("tidyverse", 
+             "ggthemes", # add themes to ggplot2
+             "lubridate",  # working with datetime
+             "ggrepel" # annotate data points
+             )
+
+## Now load or install&load all
+package.check <- lapply(
+    packages,
+    FUN = function(x) {
+        if (!require(x, character.only = TRUE)) {
+            install.packages(x, dependencies = TRUE)
+            library(x, character.only = TRUE)
+        }
+    }
+)
+```
+
+## Loading data
+
+```{r message=FALSE}
+df <- readr::read_csv('sales.csv')
+head(df)
+```
+
+## Total sales for each payment method
+
+```{r}
+df %>%
+    group_by(payment) %>%
+    summarize(total_sales = sum(total)) %>%
+    ggplot(aes(x = reorder(payment, -total_sales), y = total_sales)) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    geom_text(
+        aes(label = scales::label_comma(accuracy = .1)(total_sales)),
+        position = position_dodge(width = 0.9),
+        vjust = -0.25,
+        fontface = 2
+    ) +
+    labs(x = "Payment Type", y = "Total Sales", title = "Total sales for each payment method") +
+    theme_wsj(base_size=10) +
+    theme(plot.title = element_text(
+        face = "bold",
+        margin = margin(10, 0, 10, 0),
+        size = 20
+    ))
+```
+
+## Average unit price for each product line
+
+```{r}
+df %>%
+    group_by(product_line) %>%
+    summarize(mean_price = mean(unit_price)) %>%
+    ggplot(aes(x = reorder(product_line,mean_price), y = mean_price)) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    coord_flip() +
+    geom_text(
+        aes(label = format(mean_price, digits = 3)),
+        position = position_dodge(width = 0.9),
+        hjust = 1.3,
+        color = 'white',
+        fontface = 2
+    ) +
+    ggtitle("Average unit price for each product line") +
+    theme_wsj(base_size=10) +
+    theme(
+        plot.title = element_text(
+            face = "bold",
+            margin = margin(10, 0, 10, 0),
+            size = 20,
+            hjust = 1
+        ),
+        panel.grid.major.y = element_blank(),
+        panel.grid.major.x = element_line(),
+    )
+```
+
+## Average purchase value by client type
+
+```{r}
+df %>% 
+    group_by(client_type) %>%
+    summarize(avg_purchase = mean(total)) %>%
+    ggplot(aes(x = client_type, y = avg_purchase)) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    geom_text(
+        aes(label = format(avg_purchase, digits = 3)),
+        position = position_dodge(width = 0.9),
+        vjust = 1.4,
+        fontface = 2,
+        color = "white"
+    ) +
+    ggtitle("Average purchase value by client type") +
+    theme_wsj(base_size=10) +
+    theme(plot.title = element_text(
+        face = "bold",
+        margin = margin(10, 0, 10, 0),
+        size = 20,
+        hjust = 0
+    ))
+```
+
+## Total purchase value by product line
+
+```{r}
+df %>%
+    group_by(product_line) %>%
+    summarize(total_purchase_val = sum(total)) %>%
+    ggplot(aes(
+        x = reorder(product_line,total_purchase_val),
+        y = total_purchase_val
+    )) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    coord_flip() +
+    geom_text(
+        aes(label = scales::label_comma(accuracy = .1)(total_purchase_val)),
+        position = position_dodge(width = 0.9),
+        hjust = 1.2,
+        color = "white",
+        size = 4,
+        fontface = 2
+    ) +
+    ggtitle("Total purchase value by product line") +
+    theme_wsj(base_size=10) +
+    theme(
+        plot.title = element_text(
+            face = "bold",
+            margin = margin(10, 0, 10, 0),
+            size = 20,
+            hjust = 1
+        ),
+        panel.grid.major.y = element_blank(),
+        panel.grid.major.x = element_line()
+    )
+```
+
+## Total Sale over time
+
+```{r}
+df %>%
+    ggplot(aes(x = date, y = total)) +
+    geom_point(color = "firebrick") +
+    ggtitle("Total Sales over three months") +
+    geom_label_repel(
+        aes(label = ifelse(total > 2100, as.character(
+            str_glue("{day(date)} {month(date, label = T)} ({wday(date, label = T)}) - {total}")), '')),
+        box.padding   = 0.35,
+        point.padding = 0.5,
+        segment.color = 'grey50',
+        size = 3,
+    ) +
+    theme_wsj(base_size = 10) +
+    theme(plot.title = element_text(
+        face = "bold",
+        margin = margin(10, 0, 10, 0),
+        size = 20,
+        hjust = .5
+    ))
+```
+
+## Total Purchase by month
+
+```{r}
+df %>%
+    mutate(month = month(date, label = T)) %>%
+    group_by(month) %>%
+    summarize(total_sales = sum(total)) %>%
+    ggplot(aes(x = reorder(month, total_sales), y = total_sales)) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    geom_text(
+        aes(label = scales::label_comma()(total_sales)),
+        position = position_dodge(width = 0.9),
+        vjust = 1.4,
+        fontface = 2,
+        color = "white"
+    ) +
+    ggtitle("Total sales by month") +
+    theme_wsj(base_size = 10) +
+    theme(plot.title = element_text(
+        face = "bold",
+        margin = margin(10, 0, 10, 0),
+        size = 20,
+        hjust = 0.5
+    ))
+```
+
+## Total sales by region
+
+```{r}
+df %>% 
+    group_by(warehouse) %>%
+    summarize(total_purchase = sum(total)) %>%
+    ggplot(aes(x = warehouse, y = total_purchase)) +
+    geom_bar(stat = "identity", fill = "firebrick") +
+    scale_y_continuous(labels = scales::label_number(suffix = " K", scale = 1e-3)) +
+    geom_text(
+        aes(label = scales::label_comma()(total_purchase)),
+        position = position_dodge(width = 0.9),
+        vjust = 1.4,
+        fontface = 2,
+        color = "white"
+    ) +
+    ggtitle("Total sales by warehouse") +
+    theme_wsj(base_size=10) +
+    theme(plot.title = element_text(
+        face = "bold",
+        margin = margin(10, 0, 10, 0),
+        size = 20,
+        hjust = .5
+    ))
+```
+
+## Summary
+
+Analyzing the total sales for each payment method, we find that transfer payment has the highest total sales with an amount of 159642.30.
+
+Looking at each of the product line, we found that the average unit price is highest for the engine parts with an amount of 60.1, and is lowest for the breaking system. On the other hand, the purchase value is highest for suspension and traction, with an amount of 73014.20.
+
+For client type, the average purchase value is 4 times greater for wholesale than retail.
+
+Looking at total sales over time, the highest sales are on Sundays and Mondays. And the highest total sale was on 8th of August, with an amount of 2546.33. August was also the month with the highest total sales.
+
+The best performing warehouse by total sales is the Central warehouse, with over 140k total sales, beating the West warehouse by \~100k sales.
