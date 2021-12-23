@@ -3,4 +3,4 @@ A collection of reports and scripts where I use R to analyze, visualize, and sol
 
 ## Sales Data Report
 
-[View report](/sales-data-report/report.html)
+[View report](https://benthecoder.github.io/R4DS/sales-data-report/report.html)
