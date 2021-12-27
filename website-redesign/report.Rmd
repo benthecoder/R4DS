@@ -1,0 +1,253 @@
+---
+title: Website redesign
+subtitle: Data Camp Competition
+author: Benedict Neo
+date: 27-12-2021
+output:
+  html_document:
+   toc: true
+   toc_float: true
+   toc_depth: 3
+   theme: sandstone
+   highlight: espresso
+   df_print: paged
+---
+
+
+# Which version of the website should you use?
+
+## 📖 Background
+
+You work for an early-stage startup in Germany. Your team has been working on a redesign of the landing page. The team believes a new design will increase the number of people who click through and join your site.
+
+They have been testing the changes for a few weeks, and now they want to measure the impact of the change and need you to determine if the increase can be due to random chance or if it is statistically significant.
+
+## 💾 The data
+
+The team assembled the following file:
+
+### Redesign test data
+
+-   `treatment` - "yes" if the user saw the new version of the landing page, no otherwise.
+-   `new_images` - "yes" if the page used a new set of images, no otherwise.
+-   `converted` - 1 if the user joined the site, 0 otherwise.
+
+The control group is those users with "no" in both columns: the old version with the old set of images.
+
+[More about this challenge](https://app.datacamp.com/learn/competitions/webpage-redesign-test)
+
+## Primer on A/B testing
+
+A/B testing is a randomized experiment with two variants A and B. It includes the application of statistical hypothesis testing (two-sample inference).
+
+A/B testing is commonly used to test new products or new features. The main principle is to split users into two groups: control and treatment. Then, we evaluate how users respond and decide which version is better.
+
+For our case, we are testing whether the new version of the landing page, and the new set of images is worth adding and is actually improving conversion.
+
+An important step of an A/B testing is to formulate the hypothesis, it's commonly done as follows
+
+-   Null hypothesis : assumes that the treatments are equal and any difference between the control and experiment groups is due to chance.
+-   Alternative hypothesis assumes that the null hypothesis is wrong and the outcomes of control and experiment groups are more different than what chance might produce.
+
+## Load Libraries
+
+```{r message=F, warning=F}
+# install.packages("kableExtra")
+# install.packages("glue")
+# devtools::install_github('Mikata-Project/ggthemr')
+library(tidyverse)
+library(kableExtra)
+library(glue)
+library(ggthemr)
+
+ggthemr("flat", type="outer", layout="scientific", spacing=3)
+```
+
+## Load Data
+
+```{r message = FALSE}
+df <- readr::read_csv('redesign.csv')
+head(df) %>%
+    kbl() %>%
+    kable_paper("hover", full_width = F)
+```
+
+## Analyzing conversion rate for each four groups
+
+What is conversion rate?
+
+Conversion rate is defined as the total number of conversions divided by the number of visitors.
+
+We can either calculate it manually with R, or use the `prop.table` function in R.
+
+We'll also be calculating the uplift for our conversion rates. Lift is calculated as the percent increase/decrease in each metric for users who received a new campaign versus a control group.
+
+Let's start with the design AB conversion rate
+
+## Analysis of old and new design
+
+### Conversion count on design bar plot
+
+```{r fig.height=5, fig.width=8}
+df %>%
+    ggplot(aes(x = factor(treatment), fill = factor(converted))) +
+    geom_bar() +
+    geom_text(
+        stat = "count",
+        aes(label = format(after_stat(count), big.mark = ",")),
+        position = position_stack(vjust = .5),
+        color="grey20",
+        size=3.3
+    ) +
+    labs(x = "treatment", fill = "converted", title = "Conversion count on design")
+
+# ggsave("plot/design_barplot.png")
+```
+
+Instead of a bar plot, we can also use a contingency table.
+
+### Contingency table of design
+
+```{r}
+prop <- table(df$converted, df$treatment)
+prop_sum <- addmargins(prop, 1)
+rownames(prop_sum) <- c("no conversion", "conversion", "sum")
+colnames(prop_sum) <- c("old design", "new design")
+
+prop_sum %>%
+    kbl() %>%
+    kable_classic(full_width = F, html_font = "Cambria")
+```
+
+From the bar plot and table, we can tell that the conversion count increased from the old to new design.
+
+To make this more concrete, let's calculate the conversion rate.
+
+To calculate the conversion rates, we can use the `prop.table` function
+
+```{r}
+prop.table(prop_sum[1:2, ], 2)  %>%
+    kbl() %>%
+    kable_classic(full_width = F, html_font = "Cambria")
+```
+
+The conversion rates are the bottom two values. We could also calculate them manually like below.
+
+```{r}
+# manual calculation
+conv_old_design <- (2223 / (2223 + 18019)) * 100
+conv_new_design <- (2366 / (2366 + 17876)) * 100
+relative_uplift <- (conv_new_design - conv_old_design)/ conv_old_design
+
+glue("Conversion rate for old design is {round(conv_old_design, 2)}%
+     Conversion rate for new design is {round(conv_new_design, 2)}%
+     From these conversion rate: the relative uplift is {round(relative_uplift, 4)}%")
+```
+
+## Analysis on new images
+
+### Conversion count on new images bar plot
+
+```{r fig.height=5, fig.width=8}
+df %>%
+    ggplot(aes(x = factor(new_images), fill = factor(converted))) +
+    geom_bar() +
+    geom_text(
+        stat = "count",
+        aes(label = format(after_stat(count), big.mark = ",")),
+        position = position_stack(vjust = .5),
+        color="grey20",
+        size=3.3
+    ) +
+    labs(x = "new images", fill = "converted", title = "Conversion count on new images")
+
+# ggsave("plot/images_barplot.png")
+```
+### Proportion table
+
+```{r}
+prop <- table(df$converted, df$new_images)
+prop_sum <- addmargins(prop, 1)
+rownames(prop_sum) <- c("no conversion", "conversion", "sum")
+colnames(prop_sum) <- c("no images", "new images")
+
+prop_sum %>%
+    kbl() %>%
+    kable_classic(full_width = F, html_font = "Cambria")
+```
+
+For the new images, the conversion count decreases from no images to new images.
+
+```{r}
+prop.table(prop_sum[1:2, ], 2)  %>%
+    kbl() %>%
+    kable_classic(full_width = F, html_font = "Cambria")
+```
+
+```{r}
+conv_old_images <- (2299 / (2299 + 17943)) * 100
+conv_new_images <- (2290 / (2290 + 17952)) * 100
+relative_uplift <- (conv_new_images - conv_old_images)/ conv_old_images
+
+glue("Conversion rate for old design is {round(conv_old_images, 2)}%
+     Conversion rate for new design is {round(conv_new_images, 2)}%
+     From these conversion rate: the relative uplift is {round(relative_uplift, 4)}%")
+```
+
+The conversion rates and uplift is useful to grasp an idea of the efficacy of the changes from the data, but to strengthen this evidence, and to make sure it's not by chance, we need to utilize statistical testing for significance
+
+## Hypothesis test on design and images
+
+To test whether difference in proportion is statistically significance, we carry out a chi-square test as the outcome is categorical.
+
+### Test Hypothesis for new design
+
+Null Hypothesis: Conversion rates are equal for the old design and new design
+
+Alternative Hypothesis: Conversion rates are different for the old design and new design
+
+We'll be using `prop.test` to test whether our two proportions are significantly different. This is done by performing Pearson's chi-squared test under the hood.
+
+We put the same proportion table earlier, and R does the rest for us.
+
+```{r}
+prop <- table(df$treatment, df$converted)
+prop.test(prop)
+```
+
+We're looking for a p-value < 0.05 for the difference to be significant. From our test, we have a p-value of 0.026. This means we have evidence to suggest that the difference is statistically significant, and the result is not by chance.
+
+Now to test for the new images.
+
+### Test Hypothesis for new images
+
+Null Hypothesis: Conversion rates are equal for no images and new images
+
+Alternative Hypothesis: Conversion rates are different for no images and new images
+
+
+```{r}
+prop <- table(df$new_images, df$converted)
+prop.test(prop)
+```
+The p-value for this test is 0.9002. This means we have little to no evidence to suggest that the conversion rates are different.
+
+## Conclusion
+
+Based on the data, and the hypothesis tests carried out, there is significant evidence to suggest the new design has a different conversion rate than the old design. However, the test shows there is little to no evidence to suggest the new images has a different conversion rate from the old design.
+
+So, the version of the website they should use is the new design without the new images.
+
+## Appendix
+
+```{r}
+sessionInfo()
+```
+
+## Resource
+
+- [ggthemr](https://github.com/Mikata-Project/ggthemr)
+- [Learning Data Science: A/B Testing in Under One Minute](https://www.r-bloggers.com/2020/06/learning-data-science-a-b-testing-in-under-one-minute/)
+- [A Guide to A/B Testing — How to Formulate, Design and Interpret | by Idil Ismiguzel](https://towardsdatascience.com/a-guide-to-a-b-testing-how-to-formulate-design-and-interpret-f820cc62e21a)
+- [A/B Testing: A Complete Guide to Statistical Testing | by Francesco Casalegno | Towards Data Science](https://towardsdatascience.com/a-b-testing-a-complete-guide-to-statistical-testing-e3f1db140499)
+- [A/B Testing in R. What is A/B Testing? | by Sheenal Srivastava | Towards Data Science](https://towardsdatascience.com/a-b-testing-in-r-ae819ce30656)
