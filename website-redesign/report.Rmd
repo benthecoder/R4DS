@@ -1,15 +1,15 @@
 ---
-title: Website redesign
+title: Website redesign AB Testing
 subtitle: Data Camp Competition
 author: Benedict Neo
-date: 27-12-2021
+date: "Last compiled on `r format(Sys.time(), '%d/%m/%y')`"
 output:
   html_document:
    toc: true
    toc_float: true
    toc_depth: 3
-   theme: sandstone
-   highlight: espresso
+   theme: journal
+   highlight: zenburn
    df_print: paged
 ---
 
@@ -49,18 +49,22 @@ An important step of an A/B testing is to formulate the hypothesis, it's commonl
 -   Null hypothesis : assumes that the treatments are equal and any difference between the control and experiment groups is due to chance.
 -   Alternative hypothesis assumes that the null hypothesis is wrong and the outcomes of control and experiment groups are more different than what chance might produce.
 
+```{r include=FALSE}
+knitr::opts_chunk$set(comment = NA) # remove "#" in output
+```
+
 ## Load Libraries
 
 ```{r message=F, warning=F}
 # install.packages("kableExtra")
 # install.packages("glue")
-# devtools::install_github('Mikata-Project/ggthemr')
+# install.packages("formattable")
 library(tidyverse)
 library(kableExtra)
 library(glue)
 library(ggthemr)
-
-ggthemr("flat", type="outer", layout="scientific", spacing=3)
+library(broom)
+library(formattable)
 ```
 
 ## Load Data
@@ -74,6 +78,14 @@ head(df) %>%
 
 ## Analyzing conversion rate for each four groups
 
+There are two changes to the website - landing page and pictures
+
+This gives us four groups of users
+- A : old landing and old pictures (control)
+- B : new landing and old pictures
+- C : old landing and new pictures
+- D : new landing and new pictures
+
 What is conversion rate?
 
 Conversion rate is defined as the total number of conversions divided by the number of visitors.
@@ -82,172 +94,207 @@ We can either calculate it manually with R, or use the `prop.table` function in 
 
 We'll also be calculating the uplift for our conversion rates. Lift is calculated as the percent increase/decrease in each metric for users who received a new campaign versus a control group.
 
-Let's start with the design AB conversion rate
+With the 4 groups of users, we can calculate the conversion rate for each of them like below
 
-## Analysis of old and new design
-
-### Conversion count on design bar plot
-
-```{r fig.height=5, fig.width=8}
-df %>%
-    ggplot(aes(x = factor(treatment), fill = factor(converted))) +
-    geom_bar() +
-    geom_text(
-        stat = "count",
-        aes(label = format(after_stat(count), big.mark = ",")),
-        position = position_stack(vjust = .5),
-        color="grey20",
-        size=3.3
-    ) +
-    labs(x = "treatment", fill = "converted", title = "Conversion count on design")
-
-# ggsave("plot/design_barplot.png")
-```
-
-Instead of a bar plot, we can also use a contingency table.
-
-### Contingency table of design
 
 ```{r}
-prop <- table(df$converted, df$treatment)
-prop_sum <- addmargins(prop, 1)
-rownames(prop_sum) <- c("no conversion", "conversion", "sum")
-colnames(prop_sum) <- c("old design", "new design")
+A_conv <- df %>%
+  filter(treatment == 'no' & new_images == 'no') %>%
+  summarize('conversion rate' = round(sum(converted) / nrow(.), 5)) 
 
-prop_sum %>%
-    kbl() %>%
-    kable_classic(full_width = F, html_font = "Cambria")
+glue("Conversion rate for group A is {A_conv}")
 ```
 
-From the bar plot and table, we can tell that the conversion count increased from the old to new design.
-
-To make this more concrete, let's calculate the conversion rate.
-
-To calculate the conversion rates, we can use the `prop.table` function
+To prevent repeating code and to add more info to the output, I've written up a function to do that
 
 ```{r}
-prop.table(prop_sum[1:2, ], 2)  %>%
-    kbl() %>%
-    kable_classic(full_width = F, html_font = "Cambria")
+get_info <- function(treatment_bool, new_images_bool, digits = 5) {
+  data <- df %>%
+    filter(treatment == treatment_bool & new_images == new_images_bool) %>%
+    summarize(total_users = nrow(.),
+              total_conv = sum(converted),
+              conv_rate = round(sum(converted) / nrow(.), digits))
+  conv_rate <- data$conv_rate
+  total_users <- data$total_users
+  total_conv <- data$total_conv
+  
+  glue("
+       Group: treament = {treatment_bool}, new_images = {new_images_bool}
+       Total users: {total_users}
+       Total conversions: {total_conv}
+       Conversion rate : {conv_rate}
+       
+       ")
+}
 ```
 
-The conversion rates are the bottom two values. We could also calculate them manually like below.
+
+```{r echo=FALSE}
+get_info('no', 'no')
+get_info('no', 'yes')
+get_info('yes', 'no')
+get_info('yes', 'yes')
+```
+### Uplift
+
+Lift is calculated as the percent increase/decrease in each metric for users who received a new campaign versus a control group.
+
+The formula for uplift is ((new_conv_rate - old_conv_rate ) / old_conv_rate ) * 100
+
 
 ```{r}
-# manual calculation
-conv_old_design <- (2223 / (2223 + 18019)) * 100
-conv_new_design <- (2366 / (2366 + 17876)) * 100
-relative_uplift <- (conv_new_design - conv_old_design)/ conv_old_design
+A_conv <- 0.1071
+B_conv <- 0.11254
+C_conv <- 0.12005
+D_conv <- 0.11372
 
-glue("Conversion rate for old design is {round(conv_old_design, 2)}%
-     Conversion rate for new design is {round(conv_new_design, 2)}%
-     From these conversion rate: the relative uplift is {round(relative_uplift, 4)}%")
+AB_uplift <- round(((B_conv - A_conv) / A_conv) * 100, 3)
+AC_uplift <- round(((C_conv - A_conv) / A_conv) * 100, 3)
+BD_uplift <- round(((D_conv - B_conv) / B_conv) * 100, 3)
+CD_uplift <- round(((D_conv - C_conv) / C_conv) * 100, 3)
+AD_uplift <- round(((D_conv - A_conv) / A_conv) * 100, 3)
 ```
 
-## Analysis on new images
+```{r include=F}
+glue("
+    A : old landing and old pictures (control)
+    B : new landing and old pictures
+    C : old landing and new pictures
+    D : new landing and new pictures
 
-### Conversion count on new images bar plot
-
-```{r fig.height=5, fig.width=8}
-df %>%
-    ggplot(aes(x = factor(new_images), fill = factor(converted))) +
-    geom_bar() +
-    geom_text(
-        stat = "count",
-        aes(label = format(after_stat(count), big.mark = ",")),
-        position = position_stack(vjust = .5),
-        color="grey20",
-        size=3.3
-    ) +
-    labs(x = "new images", fill = "converted", title = "Conversion count on new images")
-
-# ggsave("plot/images_barplot.png")
-```
-### Proportion table
-
-```{r}
-prop <- table(df$converted, df$new_images)
-prop_sum <- addmargins(prop, 1)
-rownames(prop_sum) <- c("no conversion", "conversion", "sum")
-colnames(prop_sum) <- c("no images", "new images")
-
-prop_sum %>%
-    kbl() %>%
-    kable_classic(full_width = F, html_font = "Cambria")
+    AB: For users in group A, adding a new landing page increase the conversion rate from {A_conv} to {B_conv}, and the uplift is {AB_uplift}%
+    
+    AC: For users in group A, adding a new pictures increase the conversion rate from {A_conv} to {C_conv}, and the uplift is {AC_uplift}%
+    
+    AD: For users in group A, adding a new pictures and landing page increase the conversion rate from {A_conv} to {D_conv}, and the uplift is {AD_uplift}%
+    
+    BD: For users in group B, adding a new pictures increase the conversion rate from {B_conv} to {D_conv}, and the uplift is {BD_uplift}%
+    
+    CD: For users in group C, adding a new landing page decreases the conversion rate from {C_conv} to {D_conv}, and the uplift is {CD_uplift}%
+    
+     ")
 ```
 
-For the new images, the conversion count decreases from no images to new images.
 
-```{r}
-prop.table(prop_sum[1:2, ], 2)  %>%
-    kbl() %>%
-    kable_classic(full_width = F, html_font = "Cambria")
-```
-
-```{r}
-conv_old_images <- (2299 / (2299 + 17943)) * 100
-conv_new_images <- (2290 / (2290 + 17952)) * 100
-relative_uplift <- (conv_new_images - conv_old_images)/ conv_old_images
-
-glue("Conversion rate for old design is {round(conv_old_images, 2)}%
-     Conversion rate for new design is {round(conv_new_images, 2)}%
-     From these conversion rate: the relative uplift is {round(relative_uplift, 4)}%")
-```
-
-The conversion rates and uplift is useful to grasp an idea of the efficacy of the changes from the data, but to strengthen this evidence, and to make sure it's not by chance, we need to utilize statistical testing for significance
+To quantify whether this increase/decrease observed is due to random chance or if it is statistically significant, we perform hypothesis testing
 
 ## Hypothesis test on design and images
 
-To test whether difference in proportion is statistically significance, we carry out a chi-square test as the outcome is categorical.
+Question statement: Can the increases observed be explained by randomness? 
 
-### Test Hypothesis for new design
+To answer this question, we carry out Fisher's hypothesis testing, where the hypothesis statements are:
 
-Null Hypothesis: Conversion rates are equal for the old design and new design
+H0: There is no difference for conversion rate for two websites (W1 and W2) 
+Ha: There is a difference for conversion rate for two websites (W1 and W2) 
 
-Alternative Hypothesis: Conversion rates are different for the old design and new design
-
-We'll be using `prop.test` to test whether our two proportions are significantly different. This is done by performing Pearson's chi-squared test under the hood.
-
-We put the same proportion table earlier, and R does the rest for us.
-
-```{r}
-prop <- table(df$treatment, df$converted)
-prop.test(prop)
-```
-
-We're looking for a p-value < 0.05 for the difference to be significant. From our test, we have a p-value of 0.026. This means we have evidence to suggest that the difference is statistically significant, and the result is not by chance.
-
-Now to test for the new images.
-
-### Test Hypothesis for new images
-
-Null Hypothesis: Conversion rates are equal for no images and new images
-
-Alternative Hypothesis: Conversion rates are different for no images and new images
+Test statistics = Absolute difference between the conversion rates for websites (W1- W2)
 
 
 ```{r}
-prop <- table(df$new_images, df$converted)
-prop.test(prop)
+A <- df %>% 
+  filter(treatment == 'no' & new_images == 'no') %>% 
+  select('converted')
+
+B <- df %>% 
+  filter(treatment == 'yes' & new_images == 'no') %>% 
+  select('converted')
+
+C <- df %>% 
+  filter(treatment == 'no' & new_images == 'yes') %>% 
+  select('converted')
+
+D <- df %>% 
+  filter(treatment == 'yes' & new_images == 'yes') %>% 
+  select('converted')
 ```
-The p-value for this test is 0.9002. This means we have little to no evidence to suggest that the conversion rates are different.
+
+
+```{r include=FALSE}
+library("htmltools")
+library("webshot")    
+
+export_formattable <- function(f, file, width = "100%", height = NULL, 
+                               background = "white", delay = 0.2)
+    {
+      w <- as.htmlwidget(f, width = width, height = height)
+      path <- html_print(w, background = background, viewer = NULL)
+      url <- paste0("file:///", gsub("\\\\", "/", normalizePath(path)))
+      webshot(url,
+              file = file,
+              selector = ".formattable_widget",
+              delay = delay)
+}
+
+## FT <- formattable(data)
+## export_formattable(FT, "file_name.png")
+```
+
+```{r echo=F}
+sign_formatter <- formatter("span", 
+  style = x ~ style(color = ifelse(x >= 0.05, "red", "green")))
+
+formatter_tile = formatter(
+  "span",
+  style = x ~ style(
+    color = ifelse(abs(x) < mean(abs(x)) / 2, "grey", "white"),
+    display = "block",
+    padding = "0 4px",
+    `border-radius` = "4px",
+    `background-color` = ifelse(x == 1,
+                                "transparent",
+                                csscolor(
+                                  gradient(as.numeric(abs(x)), "lightgreen", "darkgreen")
+                                ))
+  )
+)
+
+bold <- formatter("span", 
+  style = x ~ style("font-weight" = "bold"))
+
+
+# more on https://renkun-ken.github.io/formattable/articles/formattable-data-frame.html
+```
+
+
+```{r}
+library(formattable)
+out <- bind_rows(tidy(t.test(A, B)),
+                 tidy(t.test(A, C)),
+                 tidy(t.test(B, D)),
+                 tidy(t.test(C, D)),
+                 tidy(t.test(A, D)),
+                 .id = "test",) %>%
+  as_tibble() %>%
+  rename(
+    "diff_mean" = estimate,
+    "t-statistic" = statistic,
+  ) %>%
+  select(test:p.value, -c(estimate1, estimate2)) %>%
+  mutate_if(is.numeric, round, 4)
+
+# rename rows
+out$test <- c("A - B", "A - C", "B - D", "C - D", "A - D")
+
+# formatters are custom, find them in code
+formattable(out, list(
+  test = bold,
+  p.value = sign_formatter,
+  diff_mean = formatter_tile,
+  `t-statistic` = formatter_tile)) 
+```
 
 ## Conclusion
 
-Based on the data, and the hypothesis tests carried out, there is significant evidence to suggest the new design has a different conversion rate than the old design. However, the test shows there is little to no evidence to suggest the new images has a different conversion rate from the old design.
+Based on the table above, there is only one test that is statistically significant, and that is group A to B test. The p-value is 0.0037 < 0.05. For the rest of the test, they are not significant. The test with the highest p-value was adding a new landing page for a design with new images.
 
-So, the version of the website they should use is the new design without the new images.
-
-## Appendix
-
-```{r}
-sessionInfo()
-```
+So to answer the question of which version of the website the company should use - the answer, based on statistics, is to implement the design of a new landing page without the old set of images.
 
 ## Resource
 
-- [ggthemr](https://github.com/Mikata-Project/ggthemr)
 - [Learning Data Science: A/B Testing in Under One Minute](https://www.r-bloggers.com/2020/06/learning-data-science-a-b-testing-in-under-one-minute/)
 - [A Guide to A/B Testing — How to Formulate, Design and Interpret | by Idil Ismiguzel](https://towardsdatascience.com/a-guide-to-a-b-testing-how-to-formulate-design-and-interpret-f820cc62e21a)
 - [A/B Testing: A Complete Guide to Statistical Testing | by Francesco Casalegno | Towards Data Science](https://towardsdatascience.com/a-b-testing-a-complete-guide-to-statistical-testing-e3f1db140499)
 - [A/B Testing in R. What is A/B Testing? | by Sheenal Srivastava | Towards Data Science](https://towardsdatascience.com/a-b-testing-in-r-ae819ce30656)
+
+## Other reports
+- [Bayesian A/B testing](https://app.datacamp.com/workspace/w/47fb0ef8-ea01-4f36-aa88-2f2547b37d27)
